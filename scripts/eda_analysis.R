@@ -6,7 +6,7 @@ library(ggplot2)
 library(corrplot)
 # STEP 1: Load cleaned dataset
 data <- read_csv("data/clean/weather_aqi_clean.csv")
-
+data$date <- as.POSIXct(data$timestamp, origin = "1970-01-01")
 # STEP 2: Basic overview
 cat("Dataset dimensions:\n")
 print(dim(data))
@@ -22,13 +22,16 @@ cat("\nMissing values per column:\n")
 print(colSums(is.na(data)))
 
 # VISUALIZATION 1 — PM2.5 Trend
+daily_data <- data %>%
+  group_by(date = as.Date(date)) %>%
+  summarise(pm25_daily = mean(pm2_5, na.rm = TRUE))
 
-p1 <- ggplot(data, aes(x = date, y = pm2_5)) +
+p1 <- ggplot(daily_data, aes(x = date, y = pm25_daily)) +
   geom_line(color = "blue") +
   labs(
-    title = "PM2.5 Trend Over Time",
+    title = "Daily Average PM2.5 Trend",
     x = "Date",
-    y = "PM2.5"
+    y = "Average PM2.5"
   )
 
 ggsave("results/eda_plots/pm25_trend.png", plot = p1, width = 8, height = 5)
