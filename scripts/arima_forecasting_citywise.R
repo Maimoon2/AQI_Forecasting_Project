@@ -1,7 +1,3 @@
-# ==========================================
-# City-wise ARIMA Forecasting
-# ==========================================
-
 library(readr)
 library(dplyr)
 library(forecast)
