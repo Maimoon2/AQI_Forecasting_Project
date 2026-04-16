@@ -1,5 +1,5 @@
 report/
-Rdata/
-Rhistory/
-scripts/Rdata/
-scripts/Rhistory/
+.Rdata
+.Rhistory
+scripts/.Rdata
+scripts/.Rhistory
