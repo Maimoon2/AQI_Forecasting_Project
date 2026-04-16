@@ -1,105 +1,146 @@
-# Load required libraries
+# OVERALL ARIMA FORECAST SCRIPT
+
 library(readr)
 library(dplyr)
 library(forecast)
 library(ggplot2)
 library(tseries)
 
-cat("Starting ARIMA Forecasting...\n")
+cat("Starting Overall ARIMA Forecasting...\n")
 
-# Step 1: Load cleaned dataset
+setwd("C:/Users/OMEN/Desktop/AQI-Analysis-Project")
+
+# STEP 1: Load Dataset
 
 data <- read_csv("data/clean/weather_aqi_clean.csv")
-# Convert timestamp to proper date format
-data$date <- as.POSIXct(data$timestamp, origin = "1970-01-01")
+
+data$date <- as.POSIXct(data$timestamp, origin="1970-01-01")
 
 cat("Dataset loaded successfully\n")
 
-# Step 2: Create Daily Average PM2.5
+# STEP 2: Create Daily PM2.5 Trend
 
 daily_data <- data %>%
   group_by(date = as.Date(date)) %>%
-  summarise(pm25_daily = mean(pm2_5, na.rm = TRUE)) %>%
+  summarise(pm25_daily = mean(pm2_5, na.rm=TRUE)) %>%
   arrange(date)
 
-cat("Daily PM2.5 values prepared\n")
+# STEP 3: Trend Plot
 
-# Step 3: Convert to Time Series
+trend_plot <- ggplot(daily_data, aes(x=date, y=pm25_daily)) +
+  geom_line(color="blue", linewidth=1) +
+  labs(
+    title="Overall PM2.5 Pollution Trend",
+    x="Date",
+    y="Average PM2.5",
+    caption="Daily average PM2.5 across all cities"
+  ) +
+  theme_minimal()
 
-ts_data <- ts(daily_data$pm25_daily, frequency = 7)
+ggsave(
+  "results/forecast_plots/overall_trend.png",
+  trend_plot,
+  width=10,
+  height=6
+)
 
-cat("Time series created\n")
+# STEP 4: Time Series Creation
 
-# Step 4: Train/Test Split
+ts_data <- ts(daily_data$pm25_daily, frequency=7)
 
 train_size <- floor(0.8 * length(ts_data))
 
 train_ts <- ts_data[1:train_size]
-test_ts  <- ts_data[(train_size + 1):length(ts_data)]
+test_ts  <- ts_data[(train_size+1):length(ts_data)]
 
-cat("Train-test split completed\n")
+# STEP 5: Stationarity Test
 
-# Step 5: Check Stationarity (ADF Test)
+print(adf.test(train_ts))
 
-cat("Running ADF test...\n")
+# STEP 6: Train ARIMA Model
 
-adf_result <- adf.test(train_ts)
-
-print(adf_result)
-
-# Step 6: Fit ARIMA Model
-
-cat("Training ARIMA model...\n")
-
-model <- auto.arima(train_ts)
-
-summary(model)
+model <- auto.arima(train_ts, seasonal=TRUE)
 
 cat("Selected Model:\n")
 print(model)
 
-# Step 7: Forecast Future Values
+# STEP 7: Forecast
 
-forecast_values <- forecast(model, h = length(test_ts))
+forecast_values <- forecast(model, h=length(test_ts))
 
-cat("Forecast generated\n")
-
-# Step 8: Model Evaluation (RMSE)
+# STEP 8: Model Evaluation
 
 rmse <- sqrt(mean((test_ts - forecast_values$mean)^2))
+mae  <- mean(abs(test_ts - forecast_values$mean))
+mape <- mean(abs((test_ts - forecast_values$mean)/test_ts))*100
 
-cat("RMSE Value:", rmse, "\n")
+cat("\nModel Performance Metrics\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE :", mae, "\n")
+cat("MAPE:", mape, "%\n")
 
-# Step 9: Save ARIMA Forecast Plot
+# STEP 9: Combined Comparison + Error Plot
 
-png("results/forecast_plots/arima_forecast.png",
-    width = 900, height = 600)
+actual_values <- as.numeric(test_ts)
+predicted_values <- as.numeric(forecast_values$mean)
 
-plot(forecast_values,
-     main = "ARIMA Forecast of PM2.5",
-     xlab = "Time",
-     ylab = "PM2.5 Concentration")
+errors <- actual_values - predicted_values
+
+time_index <- 1:length(actual_values)
+
+png("results/forecast_plots/overall_comparison_error.png",
+    width=900,
+    height=700)
+
+par(mfrow=c(2,1))
+
+# Panel 1
+plot(time_index,
+     actual_values,
+     type="l",
+     col="red",
+     lwd=2,
+     main="Actual vs Predicted PM2.5 (Overall)",
+     xlab="Time Index (Days)",
+     ylab="PM2.5")
+
+lines(time_index,
+      predicted_values,
+      col="blue",
+      lwd=2)
+
+legend("topleft",
+       legend=c("Actual PM2.5","Predicted PM2.5"),
+       col=c("red","blue"),
+       lty=1,
+       lwd=2)
+
+# Panel 2
+plot(time_index,
+     errors,
+     type="l",
+     col="purple",
+     lwd=2,
+     main="Prediction Error (Actual - Predicted)",
+     xlab="Time Index (Days)",
+     ylab="Error")
+
+abline(h=0, col="black", lty=2)
 
 dev.off()
+# STEP 10: Save Forecast Data
 
-cat("ARIMA forecast plot saved\n")
+forecast_df <- data.frame(
+  time_index = time_index,
+  actual_pm25 = actual_values,
+  predicted_pm25 = predicted_values,
+  error = abs(actual_values - predicted_values)
+)
 
-# Step 10: Forecast vs Actual Plot
+write.csv(
+  forecast_df,
+  "results/forecast_results_overall.csv",
+  row.names=FALSE
+)
 
-
-png("results/forecast_plots/forecast_vs_actual.png",
-    width = 900, height = 600)
-
-autoplot(forecast_values) +
-  autolayer(ts(test_ts), series = "Actual PM2.5") +
-  ggtitle("ARIMA Forecast vs Actual PM2.5") +
-  xlab("Time") +
-  ylab("PM2.5 Concentration") +
-  guides(colour = guide_legend(title = "Legend"))
-
-dev.off()
-
-cat("Forecast vs Actual plot saved\n")
-
-cat("ARIMA forecasting completed successfully!\n")
-
+cat("Overall forecasting completed successfully\n")

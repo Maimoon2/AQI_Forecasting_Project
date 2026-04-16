@@ -1,3 +1,6 @@
+
+# CITY-WISE ARIMA FORECASTING SCRIPT
+
 library(readr)
 library(dplyr)
 library(forecast)
@@ -6,69 +9,126 @@ library(tseries)
 
 cat("Starting City-wise ARIMA Forecasting\n")
 
-# Load dataset
+setwd("C:/Users/OMEN/Desktop/AQI-Analysis-Project")
+
 data <- read_csv("data/clean/weather_aqi_clean.csv")
 
-# Convert timestamp
 data$date <- as.POSIXct(data$timestamp, origin="1970-01-01")
 
-# Get list of cities
 cities <- unique(data$city)
 
-print(cities)
+all_forecasts <- data.frame()
 
-# Loop through each city
 for(city_name in cities){
   
-  cat("\nProcessing city:", city_name,"\n")
+  cat("\nProcessing:", city_name,"\n")
   
-  # Filter data for that city
   city_data <- data %>%
     filter(city == city_name)
   
-  # Daily PM2.5
   daily_data <- city_data %>%
     group_by(date = as.Date(date)) %>%
     summarise(pm25_daily = mean(pm2_5, na.rm=TRUE)) %>%
     arrange(date)
   
-  # Convert to time series
+  if(nrow(daily_data) < 30){
+    cat("Skipping city (not enough data)\n")
+    next
+  }
+  
+  # Trend Plot
+  
+  trend_plot <- ggplot(daily_data, aes(x=date, y=pm25_daily)) +
+    geom_line(color="darkgreen", linewidth=1) +
+    labs(
+      title=paste("PM2.5 Trend -", city_name),
+      x="Date",
+      y="Average PM2.5"
+    ) +
+    theme_minimal()
+  
+  ggsave(
+    paste0("results/forecast_plots/trend_",city_name,".png"),
+    trend_plot,
+    width=10,
+    height=6
+  )
+  
   ts_data <- ts(daily_data$pm25_daily, frequency=7)
   
-  # Train/Test split
   train_size <- floor(0.8 * length(ts_data))
   
   train_ts <- ts_data[1:train_size]
   test_ts  <- ts_data[(train_size+1):length(ts_data)]
   
-  # ADF Test
-  adf_result <- adf.test(train_ts)
-  print(adf_result)
+  model <- auto.arima(train_ts, seasonal=TRUE)
   
-  # Train ARIMA
-  model <- auto.arima(train_ts)
-  
-  print(model)
-  
-  # Forecast
   forecast_values <- forecast(model, h=length(test_ts))
   
-  # RMSE
-  rmse <- sqrt(mean((test_ts - forecast_values$mean)^2))
-  cat("RMSE:", rmse,"\n")
+  actual_values <- as.numeric(test_ts)
+  predicted_values <- as.numeric(forecast_values$mean)
   
-  # Save forecast plot
-  file_name <- paste0("results/forecast_plots/arima_forecast_",city_name,".png")
+  errors <- actual_values - predicted_values
   
-  png(file_name, width=900, height=600)
+  time_index <- 1:length(actual_values)
   
-  plot(forecast_values,
-       main=paste("ARIMA Forecast for", city_name),
-       xlab="Time",
+  png(
+    paste0("results/forecast_plots/comparison_error_",city_name,".png"),
+    width=900,
+    height=700
+  )
+  
+  par(mfrow=c(2,1))
+  
+  plot(time_index,
+       actual_values,
+       type="l",
+       col="red",
+       lwd=2,
+       main=paste("Actual vs Predicted PM2.5 -", city_name),
+       xlab="Time Index",
        ylab="PM2.5")
+  
+  lines(time_index,
+        predicted_values,
+        col="blue",
+        lwd=2)
+  
+  legend("topleft",
+         legend=c("Actual","Predicted"),
+         col=c("red","blue"),
+         lty=1,
+         lwd=2)
+  
+  plot(time_index,
+       errors,
+       type="l",
+       col="purple",
+       lwd=2,
+       main=paste("Prediction Error -", city_name),
+       xlab="Time Index",
+       ylab="Error")
+  
+  abline(h=0, col="black", lty=2)
   
   dev.off()
   
+  forecast_df <- data.frame(
+    city = city_name,
+    time_index = time_index,
+    actual_pm25 = actual_values,
+    predicted_pm25 = predicted_values,
+    error = abs(errors)
+  )
+  
+  all_forecasts <- rbind(all_forecasts, forecast_df)
+  
 }
 
-cat("\nCity-wise forecasting completed\n")
+write.csv(
+  all_forecasts,
+  "results/forecast_results_citywise.csv",
+  row.names=FALSE
+)
+
+cat("City-wise forecasting completed\n")
