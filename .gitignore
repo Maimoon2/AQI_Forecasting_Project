@@ -3,3 +3,4 @@ report/
 .Rhistory
 scripts/.Rdata
 scripts/.Rhistory
+.env

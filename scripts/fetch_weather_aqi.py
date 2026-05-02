@@ -1,7 +1,11 @@
 import requests
 import pandas as pd
+import os
+from dotenv import load_dotenv
 
-API_KEY = "2b103e72040a6a2a006a24cbfb5ece89"
+load_dotenv()
+
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 cities = {
     "Delhi": (28.61, 77.23),
@@ -26,8 +30,8 @@ for city, (lat, lon) in cities.items():
     params = {
         "lat": lat,
         "lon": lon,
-        "start": 1680000000,   # older date
-        "end": 1705000000,     # recent date
+        "start": 1680000000,
+        "end": 1705000000,
         "appid": API_KEY
     }
 
